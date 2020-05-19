@@ -19,6 +19,18 @@ inline float reduce_sum_f32v(__m256 v)
   __m128 v_high3 = _mm_shuffle_ps(v_sum2, v_sum2, 0x1);
   return _mm_cvtss_f32(_mm_add_ps(v_low3, v_high3));
 }
+
+inline __m256 rsqrt_nr_f32v(__m256 x)
+{
+  // Equation to solve: f(y) = 1/y^2 - x = 0.
+  // f'(y) = -2/y^3,
+  // y_n+1 = y_n - f(y_n)/f'(y_n) = y_n*(3-x*y_n^2)/2
+  __m256 three = _mm256_set1_ps(3.0);
+  __m256 half  = _mm256_set1_ps(0.5);
+  __m256 yn    = _mm256_rsqrt_ps(x);
+  __m256 muls  = _mm256_mul_ps(_mm256_mul_ps(x, yn), yn);
+  return _mm256_mul_ps(_mm256_mul_ps(half, yn), _mm256_sub_ps(three, muls));
+}
 } // namespace my
 
 int main() {
@@ -36,14 +48,12 @@ int main() {
   __m256 idx = _mm256_set_ps(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
   for(int i=0; i<N; i++) {
     // #0: calc 1/r
-    __m256 xi_vec = _mm256_set1_ps(x[i]);
-    __m256 yi_vec = _mm256_set1_ps(y[i]);
-    __m256 rx_vec = _mm256_sub_ps(xi_vec, x_vec);
-    __m256 ry_vec = _mm256_sub_ps(yi_vec, y_vec);
+    __m256 rx_vec = _mm256_sub_ps(_mm256_set1_ps(x[i]), x_vec);
+    __m256 ry_vec = _mm256_sub_ps(_mm256_set1_ps(y[i]), y_vec);
     __m256 sq_rx_vec = _mm256_mul_ps(rx_vec, rx_vec);
     __m256 sq_ry_vec = _mm256_mul_ps(ry_vec, ry_vec);
     __m256 sq_r_vec = _mm256_add_ps(sq_rx_vec, sq_ry_vec);
-    __m256 rr_vec = _mm256_rsqrt_ps(sq_r_vec);
+    __m256 rr_vec = my::rsqrt_nr_f32v(sq_r_vec);
     __m256 neg = _mm256_set1_ps(-1.0);
     // #1: calc fx
     __m256 fx_tmp  = _mm256_mul_ps(rx_vec, m_vec);
