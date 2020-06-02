@@ -48,8 +48,7 @@ namespace gemm {
 template <
     int                         LdgAlignA,              ///< Alignment (in bytes) for A operand
     int                         LdgAlignB,              ///< Alignment (in bytes) for B operand
-    int                         LdgAlignC,              ///< Alignment (in bytes) for C operand
-    bool                        AllowRaggedTiles        ///< Whether the input matrix's dimensions need not be an even-multiple of the block-wide tile dimensions
+    int                         LdgAlignC               ///< Alignment (in bytes) for C operand
 >
 struct block_task
 {

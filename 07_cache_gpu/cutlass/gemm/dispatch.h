@@ -22,8 +22,7 @@ namespace gemm {
   typedef block_task<
     16,
     16,
-    4,
-    false> block_task_t;
+    4> block_task_t;
 
     // Declare statically-allocated shared storage
     __shared__ typename block_task_t::scratch_storage_t smem;

@@ -75,11 +75,7 @@ namespace gemm {
  */
 template <
     int ThreadItemsY,                   ///< Height of thread tile in accum_t
-    int ThreadItemsX,                   ///< Width of thread tile in accum_t
-    int ACCUM_BYTES =                   ///< Size in bytes of accum_t
-        sizeof(float),
-    arch_family_t::kind_t ArchFamily =  ///< Architectural family enumerant
-        CUTLASS_ARCH_FAMILY>
+    int ThreadItemsX>                   ///< Width of thread tile in accum_t
 struct thread_accumulator
 {
 public:
@@ -87,9 +83,6 @@ public:
     //-------------------------------------------------------------------------
     // Member types
     //-------------------------------------------------------------------------
-
-    /// Dot-product vector type
-    typedef float dp_vector_t;
 
     /// Scratch storage layout
     struct scratch_storage_t {};
