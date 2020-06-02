@@ -76,10 +76,8 @@ namespace gemm {
 template <
     int ThreadItemsY,                   ///< Height of thread tile in accum_t
     int ThreadItemsX,                   ///< Width of thread tile in accum_t
-    typename value_t,                   ///< Multiplicand value type
-    typename accum_t,                   ///< Accumulator value type
     int ACCUM_BYTES =                   ///< Size in bytes of accum_t
-        sizeof(accum_t),
+        sizeof(float),
     arch_family_t::kind_t ArchFamily =  ///< Architectural family enumerant
         CUTLASS_ARCH_FAMILY>
 struct thread_accumulator
@@ -91,7 +89,7 @@ protected:
     //-------------------------------------------------------------------------
 
     /// Specialized dot-product traits type
-    typedef dp_accummulate<value_t, accum_t> dp_accum_traits_t;
+    typedef dp_accummulate<float, float> dp_accum_traits_t;
 
 
 public:
@@ -114,7 +112,7 @@ protected:
     //-------------------------------------------------------------------------
 
     /// Thread's tile of accumulators
-    accum_t accumulators[ThreadItemsY][ThreadItemsX];
+    float accumulators[ThreadItemsY][ThreadItemsX];
 
 
     //-------------------------------------------------------------------------
@@ -170,7 +168,7 @@ public:
             #pragma unroll
             for (int x = 0; x < ThreadItemsX; ++x)
             {
-                accumulators[y][x] = accum_t(0);
+                accumulators[y][x] = float(0);
             }
         }
     }
@@ -180,7 +178,7 @@ public:
      * Retrieve the accumulator at thread tile coordinates (x, y)
      */
     inline __device__
-    accum_t get(int x, int y)
+    float get(int x, int y)
     {
         // Accumulators are row-major
         return accumulators[y][x];
@@ -231,8 +229,6 @@ template <
 struct thread_accumulator<
     ThreadItemsY,
     ThreadItemsX,
-    __half,                             ///< Multiplicand value type (matrices A and B)
-    __half,                             ///< Accumulator value type (matrix C and scalars)
     2,                                  ///< Size in bytes of accum_t
     ArchFamily>
 {

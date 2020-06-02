@@ -72,8 +72,7 @@ struct block_task
     /// Accumulator type
     typedef thread_accumulator<
             ThreadItemsY,
-            ThreadItemsX,
-            float, float>
+            ThreadItemsX>
         thread_accumulator_t;
 
     /// Dot-product vector type along the K-axis (e.g, uchar4 when using IDP4A)
