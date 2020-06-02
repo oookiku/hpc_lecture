@@ -20,11 +20,8 @@ namespace gemm {
                        float *d_c)               ///< Pointer to matrix C array values
 {
   typedef block_task<
-    float,
-    float,
     16,
     16,
-    gemm::blas_scaled_epilogue,
     4,
     false> block_task_t;
 

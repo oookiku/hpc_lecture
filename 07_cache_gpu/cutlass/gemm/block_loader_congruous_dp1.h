@@ -74,18 +74,14 @@ template <
     int BlockThreads,           ///< Number of threads in each thread block (blockDim.x)
     int BlockDpVectorsK,        ///< Extent of block-wide tile in dp_vector_t along the K-axis (height)
     int BlockDpVectorsL,        ///< Extent of block-wide tile in dp_vector_t along the L-axis (width)
-    typename value_t,           ///< Input matrix value type
-    int LeadingDimAlignBytes,   ///< Byte alignment of input matrix leading dimension
-    bool AllowRaggedTiles       ///< Whether the input matrix's dimensions need not be an even-multiple of the block-wide tile dimensions
+    int LeadingDimAlignBytes    ///< Byte alignment of input matrix leading dimension
 >
 struct block_loader<
     BlockThreads,
     BlockDpVectorsK,
     BlockDpVectorsL,
-    value_t,
     LeadingDimAlignBytes,
-    AllowRaggedTiles,
-    value_t,                        ///< Dot-product vector type along the K-axis (dp1 specialization)
+    float,                        ///< Dot-product vector type along the K-axis (dp1 specialization)
     load_algorithm::CongruousCopy>  ///< Algorithm for loading a shared tile of KxL matrix data (CongruousCopy specialization)
 {
     //-------------------------------------------------------------------------
@@ -93,12 +89,12 @@ struct block_loader<
     //-------------------------------------------------------------------------
 
     /// Dot-product vector type along the K-axis
-    typedef value_t dp_vector_t;
+    typedef float dp_vector_t;
 
     enum
     {
         /// Number of value_t in a dp_vector_t
-        DpVectorItems = divide_assert<sizeof(dp_vector_t), sizeof(value_t)>::value,
+        DpVectorItems = divide_assert<sizeof(dp_vector_t), sizeof(float)>::value,
 
         /// Number of dp_vector_t in a block-wide tile
         BlockDpVectors = BlockDpVectorsK * BlockDpVectorsL,
@@ -217,7 +213,7 @@ struct block_loader<
     /// Constructor
     inline __device__
     block_loader(
-        value_t *d_matrix_items,        ///< Input pointer to matrix in value_t
+        float *d_matrix_items,        ///< Input pointer to matrix in value_t
         int matrix_items_l,             ///< Extent of the input matrix in value_t along the L-axis
         int matrix_items_stride_k,      ///< Distance in value_t within pitched-linear memory between successive coordinates along the K-axis
         int matrix_items_stride_l,      ///< Distance in value_t within pitched-linear memory between successive coordinates along the L-axis
@@ -255,46 +251,6 @@ struct block_loader<
         // Iteration range in "whole-k" block-wide tiles
         wholek_tiles_remaining = span_ldgvec_k / BlockLdgVectorsK;
 
-        // Extent of final residue-tile in ldg_vector_t along K-axis
-        int residue_ldgvecs_k = span_ldgvec_k % BlockLdgVectorsK;
-
-        // Initialize I/O predicates
-        if (AllowRaggedTiles)
-        {
-            // Outer thread-tile ldg_vector_t iteration (K-axis)
-            #pragma unroll
-            for (int thread_ldgvec_k = 0; thread_ldgvec_k < ThreadLdgVectorsK; ++thread_ldgvec_k)
-            {
-                int block_ldgvec_k = block_thread_ldgvec_coords.y + (thread_ldgvec_k * StripmineLdgVectorsK);
-
-                // Whether block_ldgvec_coords.y is valid in the final residue tile
-                predicate_mask_t valid_k = (block_ldgvec_k < residue_ldgvecs_k);
-
-                // Inner thread-tile ldg_vector_t iteration (L-axis)
-                #pragma unroll
-                for (int thread_ldgvec_l = 0; thread_ldgvec_l < ThreadLdgVectorsL; ++thread_ldgvec_l)
-                {
-                    int block_ldgvec_l = block_thread_ldgvec_coords.x + (thread_ldgvec_l * StripmineLdgVectorsL);
-
-                    // Whether block_ldgvec_coords.x is valid any block-wide tile
-                    predicate_mask_t valid_l = (matrix_block_ldgvec_coords.x + block_ldgvec_l < matrix_ldgvecs_l);
-
-                    // Linear index of ldg_vector_t load
-                    int ldgvec_idx = thread_ldgvec_l + (thread_ldgvec_k * ThreadLdgVectorsL);
-
-                    // Set predicate guard bits
-                    guard |= (valid_l << ldgvec_idx);
-                    residue_guard |= ((valid_l & valid_k) << ldgvec_idx);
-                }
-            }
-
-            // Promote residue-guard to primary-guard if no full tiles remain
-            if (!wholek_tiles_remaining)
-            {
-                guard = residue_guard;
-            }
-        }
-
         // Update the input pointer to be matrix_thread_ldgvec_coords
         this->d_matrix_ldgvecs =
             reinterpret_cast<ldg_vector_t*>(d_matrix_items) +
@@ -327,20 +283,13 @@ struct block_loader<
                 // Unpack predicate guard
                 predicate_mask_t valid = ((guard >> ldgvec_idx) & 1);
 
-                if (!AllowRaggedTiles || valid)
+                if (true || valid)
                 {
                     // Perform load
                     thread_tile[thread_ldgvec_k][thread_ldgvec_l].load(
                         d_matrix_ldgvecs +
                         (thread_ldgvec_k * StripmineLdgVectorsK * matrix_ldgvec_stride_k) +
                         (thread_ldgvec_l * StripmineLdgVectorsL * matrix_ldgvec_stride_l));
-                }
-                else
-                {
-                    // Zero-initialize
-                    #pragma unroll
-                    for (int dpvec = 0; dpvec < LdgVectorDpVectors; ++dpvec)
-                        thread_tile[thread_ldgvec_k][thread_ldgvec_l].buff[dpvec] = 0;
                 }
             }
         }
@@ -354,17 +303,6 @@ struct block_loader<
     void next()
     {
         d_matrix_ldgvecs += (matrix_ldgvec_stride_k * BlockLdgVectorsK);
-
-        if (AllowRaggedTiles)
-        {
-            --wholek_tiles_remaining;
-
-            // Promote residue-guard to primary-guard if no full tiles remain
-            if (!wholek_tiles_remaining)
-            {
-                guard = residue_guard;
-            }
-        }
     }
 
 
