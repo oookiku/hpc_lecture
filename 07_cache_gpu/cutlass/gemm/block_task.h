@@ -91,9 +91,6 @@ struct block_task
         /// Extent of block-wide A|B tiles in float along the K-axis
         BlockItemsK = 8,
 
-        /// Whether to halve synchronization overhead at the expense of doubled shared memory and addressing overhead
-        UseDoubleScratchTiles = false,
-
         /// Extent of block-wide A|B tiles in float along the K-axis
         BlockDpVectorsK = divide_assert<BlockItemsK, DpVectorItems>::value,
 
@@ -147,10 +144,7 @@ struct block_task
     /// Thread block rasterization helper type
     typedef grid_raster<
       64,
-      64,
-      matrix_transform_t::NonTranspose,
-      matrix_transform_t::NonTranspose,
-      grid_raster_strategy::Default>
+      64>
     grid_raster_t;
 
 
@@ -196,7 +190,7 @@ struct block_task
     struct scratch_storage_t
     {
         /// Prefetch pages
-        page_storage_t pages[UseDoubleScratchTiles ? 2 : 1];
+        page_storage_t pages;
 
         /// Accumulator shared scratch
         typename thread_accumulator_t::scratch_storage_t accum_scratch;
@@ -218,9 +212,6 @@ struct block_task
 
     /// Scratch storage reference
     scratch_storage_t *scratch;
-
-    /// Which page of scratch tiles we're currently reading from
-    int page_idx;
 
     /// Pointer to matrix C
     float *d_c;
@@ -320,7 +311,6 @@ struct block_task
         k_split_control k_split)
     :
         scratch(scratch),
-        page_idx(0),
         d_c(d_c),
         epilogue_op(epilogue_op),
         dim_m(dim_m),
@@ -373,14 +363,14 @@ struct block_task
         for (int i = 0; i < ThreadLdsVectorsB; ++i)
         {
             slice_b[i].load(
-                &scratch->pages[page_idx].block_b[tile_offset_k][thread_strip_offset_b + (i * WarpThreadsX * LdsVectorDpVectorsB)]);
+                &scratch->pages.block_b[tile_offset_k][thread_strip_offset_b + (i * WarpThreadsX * LdsVectorDpVectorsB)]);
         }
 
         // Load A strip
         for (int i = 0; i < ThreadLdsVectorsA; ++i)
         {
             slice_a[i].load(
-                &scratch->pages[page_idx].block_a[tile_offset_k][thread_strip_offset_a + (i * WarpThreadsY * LdsVectorDpVectorsA)]);
+                &scratch->pages.block_a[tile_offset_k][thread_strip_offset_a + (i * WarpThreadsY * LdsVectorDpVectorsA)]);
         }
     }
 
@@ -472,19 +462,12 @@ struct block_task
             // Last strip commits global prefetch for next tile
             if ((tile_offset_k == BlockDpVectorsK - 1) && DoGlobalPrefetch)
             {
-                // If not using two pages of scratch tiles, protect the above prefetch loads from the committing writes below
-                if (!UseDoubleScratchTiles)
-                    __syncthreads();
-
-                // If using two pages of scratch tiles, switch to next page before writing
-                if (UseDoubleScratchTiles)
-                {
-                    page_idx = (page_idx ? 0 : 1);
-                }
+                // Protect the above prefetch loads from the committing writes below
+                __syncthreads();
 
                 // Commit global prefetch data to scratch page
-                loader_a.commit(scratch->pages[page_idx].block_a);
-                loader_b.commit(scratch->pages[page_idx].block_b);
+                loader_a.commit(scratch->pages.block_a);
+                loader_b.commit(scratch->pages.block_b);
 
                 __syncthreads();
             }
@@ -526,12 +509,6 @@ struct block_task
     __forceinline__ __device__
     void run()
     {
-        // Quit if the thread block is fully out-of-bounds
-        if (grid_raster.is_block_oob(dim_m, dim_n))
-        {
-            asm volatile("exit;");
-        }
-
         // Request global prefetch of first tile
         loader_a.request();
         loader_a.next();
@@ -539,8 +516,8 @@ struct block_task
         loader_b.next();
 
         // Commit global prefetch of first tile to shared memory
-        loader_a.commit(scratch->pages[page_idx].block_a);
-        loader_b.commit(scratch->pages[page_idx].block_b);
+        loader_a.commit(scratch->pages.block_a);
+        loader_b.commit(scratch->pages.block_b);
 
         // Advance to next A,B tiles in K-axis
         block_item_coords_k += BlockItemsK;
