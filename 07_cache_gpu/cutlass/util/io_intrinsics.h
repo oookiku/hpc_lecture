@@ -207,45 +207,6 @@ struct io_vector <
  ******************************************************************************/
 
 /**
- * Define vector-4 LD specialization for the given load modifier
- */
-#define CUTLASS_LD_V4(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint) \
-    template <typename ptr_t>                                                                   \
-    inline __device__                                                                           \
-    void f_name(                                                                                \
-        value_t (&dest)[4],                                                                     \
-        ptr_t ptr)                                                                              \
-    {                                                                                           \
-        asm volatile ("ld."#load_modifier".v4."#ptx_type" {%0, %1, %2, %3}, [%4];\n"            \
-            :                                                                                   \
-                "="#val_constraint(dest[0]),                                                    \
-                "="#val_constraint(dest[1]),                                                    \
-                "="#val_constraint(dest[2]),                                                    \
-                "="#val_constraint(dest[3])                                                     \
-            :                                                                                   \
-                #ptr_constraint(ptr));                                                          \
-    }
-
-/**
- * Define vector-2 LD specialization for the given load modifier
- */
-#define CUTLASS_LD_V2(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint) \
-    template <typename ptr_t>                                                                   \
-    inline __device__                                                                           \
-    void f_name(                                                                                \
-        value_t (&dest)[2],                                                                     \
-        ptr_t ptr)                                                                              \
-    {                                                                                           \
-        asm volatile ("ld."#load_modifier".v2."#ptx_type" {%0, %1}, [%2];\n"                    \
-            :                                                                                   \
-                "="#val_constraint(dest[0]),                                                    \
-                "="#val_constraint(dest[1])                                                     \
-            :                                                                                   \
-                #ptr_constraint(ptr));                                                          \
-    }
-
-
-/**
  * Define vector-1 LD specialization for the given load modifier
  */
 #define CUTLASS_LD_V1(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint) \
@@ -267,51 +228,12 @@ struct io_vector <
  * Define powers-of-two vector LD specializations
  */
 #define CUTLASS_LD_ALL(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    CUTLASS_LD_V4(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)         \
-    CUTLASS_LD_V2(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)         \
     CUTLASS_LD_V1(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)
 
 
 /******************************************************************************
  * Macro expansions for vector stores
  ******************************************************************************/
-
-/**
- * Define vector-4 ST specialization for the given load modifier
- */
-#define CUTLASS_ST_V4(f_name, value_t, store_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    template <typename ptr_t>                                                                       \
-    inline __device__                                                                               \
-    void f_name(                                                                                    \
-        ptr_t ptr,                                                                                  \
-        const value_t (&src)[4])                                                                    \
-    {                                                                                               \
-        asm volatile ("st."#store_modifier".v4."#ptx_type" [%0], {%1, %2, %3, %4};\n"               \
-            : :                                                                                     \
-                #ptr_constraint(ptr),                                                               \
-                #val_constraint(src[0]),                                                            \
-                #val_constraint(src[1]),                                                            \
-                #val_constraint(src[2]),                                                            \
-                #val_constraint(src[3]));                                                           \
-    }
-
-
-/**
- * Define vector-2 ST specialization for the given load modifier
- */
-#define CUTLASS_ST_V2(f_name, value_t, store_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    template <typename ptr_t>                                                                       \
-    inline __device__                                                                               \
-    void f_name(                                                                                    \
-        ptr_t ptr,                                                                                  \
-        const value_t (&src)[2])                                                                    \
-    {                                                                                               \
-        asm volatile ("st."#store_modifier".v2."#ptx_type" [%0], {%1, %2};\n"                       \
-            : :                                                                                     \
-                #ptr_constraint(ptr),                                                               \
-                #val_constraint(src[0]),                                                            \
-                #val_constraint(src[1]));                                                           \
-    }
 
 /**
  * Define vector-1 ST specialization for the given load modifier
@@ -334,8 +256,6 @@ struct io_vector <
  * Define powers-of-two vector LD specializations
  */
 #define CUTLASS_ST_ALL(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    CUTLASS_ST_V4(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)         \
-    CUTLASS_ST_V2(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)         \
     CUTLASS_ST_V1(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)
 
 
@@ -436,20 +356,7 @@ void ldg_cg(
         d_in);
 }
 
-/// Load from global (cache-global modifier)
-template <typename value_t, int IoVecDim, typename ptr_t>
-inline __device__
-void ldg_cg(
-    value_t (&dest)[IoVecDim],
-    ptr_t d_in)
-{
-    static_assert(is_pow2<IoVecDim>::value, "I/O vectors must be a power-of-two.");
 
-    // Cast dest to a different array type if necessary
-    ldg_cg_internal(
-        reinterpret_cast<typename io_cast<value_t, IoVecDim>::type &>(dest),
-        d_in);
-}
 
 
 /******************************************************************************
@@ -469,20 +376,6 @@ void stg_cg(
         reinterpret_cast<const typename io_cast<value_t, 1>::type &>(src));
 }
 
-/// Store to global (cache-global modifier)
-template <typename ptr_t, int IoVecDim, typename value_t>
-inline __device__
-void stg_cg(
-    ptr_t dest,
-    const value_t (&src)[IoVecDim])
-{
-    static_assert(is_pow2<IoVecDim>::value, "I/O vectors must be a power-of-two.");
-
-    // Cast src to a different array type if necessary
-    stg_cg_internal(
-        dest,
-        reinterpret_cast<const typename io_cast<value_t, IoVecDim>::type &>(src));
-}
 
 
 
