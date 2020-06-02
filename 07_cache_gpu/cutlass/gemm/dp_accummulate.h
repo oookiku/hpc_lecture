@@ -71,10 +71,6 @@ namespace gemm {
 
 struct dp_accummulate
 {
-    /// Single-component "dp1" dot-product vector type
-    typedef float dp_vector_t;
-
-
     /// Compute "dp1" float->float
     inline __device__
     static void mad(

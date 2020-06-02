@@ -75,16 +75,13 @@ struct block_task
             ThreadItemsX>
         thread_accumulator_t;
 
-    /// Dot-product vector type along the K-axis (e.g, uchar4 when using IDP4A)
-    typedef typename thread_accumulator_t::dp_vector_t dp_vector_t;
-
     enum
     {
         /// Whether this is a small, latency-bound tile
         IsSmallTile = (ThreadItemsY < 4) && (ThreadItemsX < 4),
 
-        /// Number of float in dp_vector_t
-        DpVectorItems = divide_assert<sizeof(dp_vector_t), sizeof(float)>::value,
+        /// Number of float in float
+        DpVectorItems = divide_assert<sizeof(float), sizeof(float)>::value,
 
         /// Extent of block-wide C-tile in float (and A-tiles in float) along M-axis (height)
         BlockItemsY = 64,
@@ -98,18 +95,18 @@ struct block_task
         /// Whether to halve synchronization overhead at the expense of doubled shared memory and addressing overhead
         UseDoubleScratchTiles = false,
 
-        /// Extent of block-wide A|B tiles in dp_vector_t along the K-axis
+        /// Extent of block-wide A|B tiles in float along the K-axis
         BlockDpVectorsK = divide_assert<BlockItemsK, DpVectorItems>::value,
 
-        /// Number of dp_vector_t along M-axis that can be read in a single LDS from the shared A-tile (up to 128b if more than one float)
+        /// Number of float along M-axis that can be read in a single LDS from the shared A-tile (up to 128b if more than one float)
         LdsVectorDpVectorsA = __NV_STD_MIN(
             ThreadItemsY,
-            __NV_STD_MAX(1, (128 / (__NV_STD_MAX(sizeof(dp_vector_t), sizeof(float)) * 8)))),
+            __NV_STD_MAX(1, (128 / (__NV_STD_MAX(sizeof(float), sizeof(float)) * 8)))),
 
-        /// Number of dp_vector_t along N-axis that can be read in a single LDS from the shared B-tile (up to 128b if more than one float)
+        /// Number of float along N-axis that can be read in a single LDS from the shared B-tile (up to 128b if more than one float)
         LdsVectorDpVectorsB = __NV_STD_MIN(
             ThreadItemsX,
-            __NV_STD_MAX(1, (128 / (__NV_STD_MAX(sizeof(dp_vector_t), sizeof(float)) * 8)))),
+            __NV_STD_MAX(1, (128 / (__NV_STD_MAX(sizeof(float), sizeof(float)) * 8)))),
 
         /// Number of strip-mined LDS vector reads from shared A-tile
         ThreadLdsVectorsA = divide_assert<ThreadItemsY, LdsVectorDpVectorsA>::value,
@@ -143,10 +140,10 @@ struct block_task
     };
 
     /// Load-from-shared data movement type for A-tile, coarsened by LdsVectorDpVectorsA
-    typedef io_vector<dp_vector_t, LdsVectorDpVectorsA> lds_vector_a_t;
+    typedef io_vector<float, LdsVectorDpVectorsA> lds_vector_a_t;
 
     /// Load-from-shared data movement type for B-tile, coarsened by LdsVectorDpVectorsB
-    typedef io_vector<dp_vector_t, LdsVectorDpVectorsB> lds_vector_b_t;
+    typedef io_vector<float, LdsVectorDpVectorsB> lds_vector_b_t;
 
     /// Thread block rasterization helper type
     typedef grid_raster<
@@ -164,7 +161,6 @@ struct block_task
       8,                                    // BlockDpVectorsK
       64,                                        // BlockItemsL
       16,                                          // MatrixAlignBytes
-      dp_vector_t,                                        // dp_vector_t
       load_algorithm::CongruousCopy>
     block_loader_a_t;
 
@@ -173,9 +169,8 @@ struct block_task
     typedef block_loader<
       64,                                       // BlockThreads
       8,                                    // BlockDpVectorsK
-      64,                                        // BlockItemsL
+      64,                                        // BlockItes
       16,                                          // MatrixAlignBytes
-      dp_vector_t,                                        // dp_vector_t
       load_algorithm::CrosswiseCopy>
     block_loader_b_t;
 
@@ -191,10 +186,10 @@ struct block_task
     struct page_storage_t
     {
         /// Tile of A
-        dp_vector_t __align__(16) block_a[BlockDpVectorsK][BlockItemsY + PadItemsA];
+        float __align__(16) block_a[BlockDpVectorsK][BlockItemsY + PadItemsA];
 
         /// Tile of B
-        dp_vector_t __align__(16) block_b[BlockDpVectorsK][BlockItemsX + PadItemsB];
+        float __align__(16) block_b[BlockDpVectorsK][BlockItemsX + PadItemsB];
     };
 
 
@@ -510,9 +505,9 @@ struct block_task
               loader_a.next();
             }
 
-            // Cast strip-mined loads to contiguous array of dp_vector_t
-            typedef dp_vector_t thread_tile_a_t[ThreadLdsVectorsA * LdsVectorDpVectorsA];
-            typedef dp_vector_t thread_tile_b_t[ThreadLdsVectorsB * LdsVectorDpVectorsB];
+            // Cast strip-mined loads to contiguous array of float
+            typedef float thread_tile_a_t[ThreadLdsVectorsA * LdsVectorDpVectorsA];
+            typedef float thread_tile_b_t[ThreadLdsVectorsB * LdsVectorDpVectorsB];
             thread_tile_a_t &thread_tile_a = reinterpret_cast<thread_tile_a_t&>(local_slices_a[(tile_offset_k) % 2]);
             thread_tile_b_t &thread_tile_b = reinterpret_cast<thread_tile_b_t&>(local_slices_b[(tile_offset_k) % 2]);
 

@@ -81,7 +81,6 @@ struct block_loader<
     BlockDpVectorsK,
     BlockDpVectorsL,
     LeadingDimAlignBytes,
-    float,                        ///< Dot-product vector type along the K-axis (dp1 specialization)
     load_algorithm::CongruousCopy>  ///< Algorithm for loading a shared tile of KxL matrix data (CongruousCopy specialization)
 {
     //-------------------------------------------------------------------------
@@ -89,12 +88,10 @@ struct block_loader<
     //-------------------------------------------------------------------------
 
     /// Dot-product vector type along the K-axis
-    typedef float dp_vector_t;
-
     enum
     {
         /// Number of value_t in a dp_vector_t
-        DpVectorItems = divide_assert<sizeof(dp_vector_t), sizeof(float)>::value,
+        DpVectorItems = divide_assert<sizeof(float), sizeof(float)>::value,
 
         /// Number of dp_vector_t in a block-wide tile
         BlockDpVectors = BlockDpVectorsK * BlockDpVectorsL,
@@ -106,7 +103,7 @@ struct block_loader<
     /// Data movement type, coarsened by LeadingDimAlignBytes, capped by the
     /// smaller of either ThreadDpVectors or BlockDpVectorsL
     typedef io_vector<
-            dp_vector_t,
+            float,
             __NV_STD_MIN(ThreadDpVectors, BlockDpVectorsL),
             LeadingDimAlignBytes>
         ldg_vector_t;
@@ -316,7 +313,7 @@ struct block_loader<
     template <int SmemDpVectorsL>
     inline __device__
     void commit(
-        dp_vector_t (&scratch_tile)[BlockDpVectorsK][SmemDpVectorsL])
+        float (&scratch_tile)[BlockDpVectorsK][SmemDpVectorsL])
     {
         static_assert(SmemDpVectorsL >= BlockDpVectorsL, "Row stride must be >= tile width.");
 

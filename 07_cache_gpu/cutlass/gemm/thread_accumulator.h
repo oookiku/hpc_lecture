@@ -82,16 +82,6 @@ template <
         CUTLASS_ARCH_FAMILY>
 struct thread_accumulator
 {
-protected:
-
-    //-------------------------------------------------------------------------
-    // Constants and types
-    //-------------------------------------------------------------------------
-
-    /// Specialized dot-product traits type
-    typedef dp_accummulate dp_accum_traits_t;
-
-
 public:
 
     //-------------------------------------------------------------------------
@@ -99,7 +89,7 @@ public:
     //-------------------------------------------------------------------------
 
     /// Dot-product vector type
-    typedef typename dp_accum_traits_t::dp_vector_t dp_vector_t;
+    typedef float dp_vector_t;
 
     /// Scratch storage layout
     struct scratch_storage_t {};
@@ -124,12 +114,12 @@ protected:
      */
     inline __device__
     void mad_xy(
-        dp_vector_t (&tile_a)[ThreadItemsY],
-        dp_vector_t (&tile_b)[ThreadItemsX],
+        float (&tile_a)[ThreadItemsY],
+        float (&tile_b)[ThreadItemsX],
         int x,
         int y)
     {
-        dp_accum_traits_t::mad(
+        dp_accummulate::mad(
             accumulators[y][x],
             tile_a[y],
             tile_b[x],
@@ -191,8 +181,8 @@ public:
      */
     inline __device__
     void multiply_accumulate(
-        dp_vector_t (&tile_a)[ThreadItemsY],
-        dp_vector_t (&tile_b)[ThreadItemsX])
+        float (&tile_a)[ThreadItemsY],
+        float (&tile_b)[ThreadItemsX])
     {
         // Simply traverse the accumulator tile in row-major order
         #pragma unroll
