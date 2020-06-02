@@ -97,12 +97,12 @@ struct block_task
         /// Number of float along M-axis that can be read in a single LDS from the shared A-tile (up to 128b if more than one float)
         LdsVectorDpVectorsA = __NV_STD_MIN(
             ThreadItemsY,
-            __NV_STD_MAX(1, (128 / (__NV_STD_MAX(sizeof(float), sizeof(float)) * 8)))),
+            __NV_STD_MAX(1, (128 / (sizeof(float) * 8)))),
 
         /// Number of float along N-axis that can be read in a single LDS from the shared B-tile (up to 128b if more than one float)
         LdsVectorDpVectorsB = __NV_STD_MIN(
             ThreadItemsX,
-            __NV_STD_MAX(1, (128 / (__NV_STD_MAX(sizeof(float), sizeof(float)) * 8)))),
+            __NV_STD_MAX(1, (128 / (sizeof(float) * 8)))),
 
         /// Number of strip-mined LDS vector reads from shared A-tile
         ThreadLdsVectorsA = divide_assert<ThreadItemsY, LdsVectorDpVectorsA>::value,
@@ -150,20 +150,20 @@ struct block_task
 
     /// Tile loader type for matrix A
     typedef block_loader<
-      64,                                       // BlockThreads
+      64,                                   // BlockThreads
       8,                                    // BlockDpVectorsK
-      64,                                        // BlockItemsL
-      16,                                          // MatrixAlignBytes
+      64,                                   // BlockItemsL
+      16,                                   // MatrixAlignBytes
       load_algorithm::CongruousCopy>
     block_loader_a_t;
 
 
     /// Tile loader type for matrix B
     typedef block_loader<
-      64,                                       // BlockThreads
+      64,                                   // BlockThreads
       8,                                    // BlockDpVectorsK
-      64,                                        // BlockItes
-      16,                                          // MatrixAlignBytes
+      64,                                   // BlockItes
+      16,                                   // MatrixAlignBytes
       load_algorithm::CrosswiseCopy>
     block_loader_b_t;
 
@@ -391,14 +391,6 @@ struct block_task
         // exclsuive partial-sums
         k_split.wait();
 
-        // Configure epilogue as to whether the thread block is a secondary
-        // accumulator in an inter-block k-splitting scheme
-        if (k_split.is_secondary_accumulator())
-            epilogue_op.set_secondary_accumulator();
-
-        // Whether the addend from C needs loading
-        bool must_init_addend = epilogue_op.must_init_addend();
-
         #pragma unroll
         for (int x = 0; x < ThreadItemsX; ++x)
         {
@@ -425,10 +417,7 @@ struct block_task
                     if ((grid_raster.block_item_coords.x + thread_item_coords_tile_x) < dim_n &&
                         (grid_raster.block_item_coords.y + thread_item_coords_tile_y + i) < dim_m)
                     {
-                        if (must_init_addend)
-                        {
-                            ldg_cg(c_slice, c_ptr);
-                        }
+                        ldg_cg(c_slice, c_ptr);
 
                         c_slice = epilogue_op(accumulator.get(x, y + i), c_slice, c_idx + i);
 

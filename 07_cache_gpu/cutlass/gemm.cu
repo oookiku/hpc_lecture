@@ -6,7 +6,6 @@
 #define DEBUG
 
 #include <gemm/dispatch.h>
-#include <gemm/epilogue_function.h>
 #include "util/matrix.h"
 #include "util/timer.h"
 
@@ -21,7 +20,6 @@ int main(int argc, const char **argv) {
   static const matrix_transform_t::kind_t TransformA = matrix_transform_t::NonTranspose;
   static const matrix_transform_t::kind_t TransformB = matrix_transform_t::NonTranspose;
   int g_timing_iterations = 10;
-  cudaStream_t stream = 0;
   matrix<float> A(m, k);
   matrix<float> B(k, n);
   matrix<float> C(m, n);
@@ -69,9 +67,7 @@ int main(int argc, const char **argv) {
         beta,
         A.d_data(),
         B.d_data(),
-        C2.d_data(),
-        stream,
-        false);
+        C2.d_data());
   }
   timer.stop();
   double tcutlass = timer.elapsed_millis() / g_timing_iterations;

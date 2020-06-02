@@ -117,17 +117,6 @@ struct k_split_control
 
 
     /**
-     * Whether the thread block is a secondary accumulator in an inter-block
-     * k-splitting scheme
-     */
-    inline __device__
-    bool is_secondary_accumulator()
-    {
-        return (blockIdx.z > 0);
-    }
-
-
-    /**
      * Wait for predecessor thread block(s) to produce the exclusive
      * partial-sums for this block-wide tile
      */
