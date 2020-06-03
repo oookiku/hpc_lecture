@@ -90,9 +90,6 @@ struct block_loader<
     /// Dot-product vector type along the K-axis
     enum
     {
-        /// Number of value_t in a dp_vector_t
-        DpVectorItems = divide_assert<sizeof(float), sizeof(float)>::value,
-
         /// Number of dp_vector_t in a block-wide tile
         BlockDpVectors = BlockDpVectorsK * BlockDpVectorsL,
 
@@ -103,7 +100,6 @@ struct block_loader<
     /// Data movement type, coarsened by LeadingDimAlignBytes, capped by the
     /// smaller of either ThreadDpVectors or BlockDpVectorsL
     typedef io_vector<
-            float,
             __NV_STD_MIN(ThreadDpVectors, BlockDpVectorsL),
             LeadingDimAlignBytes>
         ldg_vector_t;
@@ -114,7 +110,7 @@ struct block_loader<
         LdgVectorDpVectors = ldg_vector_t::VectorItems,
 
         /// Number of value_t per ldg_vector_t
-        LdgVectorItems = LdgVectorDpVectors * DpVectorItems,
+        LdgVectorItems = LdgVectorDpVectors,
 
 
 

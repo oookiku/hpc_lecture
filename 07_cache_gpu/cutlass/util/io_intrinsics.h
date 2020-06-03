@@ -50,12 +50,8 @@ namespace cutlass {
 /**
  * Base aligned storage for IO vector
  */
-template <typename value_t, int VectorItems, int AlignBytes> struct io_vector_base;
-template <typename value_t, int VectorItems> struct __align__(1) io_vector_base<value_t, VectorItems, 1> { value_t buff[VectorItems]; };
-template <typename value_t, int VectorItems> struct __align__(2) io_vector_base<value_t, VectorItems, 2> { value_t buff[VectorItems]; };
-template <typename value_t, int VectorItems> struct __align__(4) io_vector_base<value_t, VectorItems, 4> { value_t buff[VectorItems]; };
-template <typename value_t, int VectorItems> struct __align__(8) io_vector_base<value_t, VectorItems, 8> { value_t buff[VectorItems]; };
-template <typename value_t, int VectorItems> struct __align__(16) io_vector_base<value_t, VectorItems, 16> { value_t buff[VectorItems]; };
+template <int VectorItems, int AlignBytes> struct io_vector_base;
+template <int VectorItems> struct __align__(16) io_vector_base<VectorItems, 16> { float buff[VectorItems]; };
 
 
 /**
@@ -65,14 +61,13 @@ template <typename value_t, int VectorItems> struct __align__(16) io_vector_base
  * values comprising the io_vector
  */
 template <
-    typename value_t,                                                           ///< Component value type
     int MaxVectorItems,                                                         ///< Maximum allowable component values
     int MaxAlignBytes                                                           ///< Maximum allowable alignment
-            = __NV_STD_MIN(16, MaxVectorItems * sizeof(value_t)),
+            = __NV_STD_MIN(16, MaxVectorItems * sizeof(float)),
     int AlignBytes                                                              ///< Actual alignment
-            = __NV_STD_MIN(sizeof(value_t) * MaxVectorItems, MaxAlignBytes),
+            = __NV_STD_MIN(sizeof(float) * MaxVectorItems, MaxAlignBytes),
     int VectorItems                                                             ///< Actual number of component values
-            = divide_assert<AlignBytes, sizeof(value_t)>::value,
+            = divide_assert<AlignBytes, sizeof(float)>::value,
     bool MustAlias                                                              ///< Whether we need to alias during loads/stores
             = (VectorItems > 4)>
 struct io_vector;
@@ -82,20 +77,18 @@ struct io_vector;
  * IO vector (specialization for VectorItems <= 4)
  */
 template <
-    typename value_t,
     int MaxVectorItems,
     int MaxAlignBytes,
     int _AlignBytes,
     int _VectorItems>
 struct io_vector <
-    value_t,
     MaxVectorItems,
     MaxAlignBytes,
     _AlignBytes,
     _VectorItems,
     false>
 :
-    io_vector_base<value_t, _VectorItems, _AlignBytes>
+    io_vector_base<_VectorItems, _AlignBytes>
 {
     enum
     {
@@ -113,7 +106,7 @@ struct io_vector <
     }
 
     inline __device__
-    void load(const value_t *ptr)
+    void load(const float *ptr)
     {
         *this = *reinterpret_cast<const io_vector*>(ptr);
     }
@@ -126,7 +119,7 @@ struct io_vector <
     }
 
     inline __device__
-    void store(value_t *ptr) const
+    void store(float *ptr) const
     {
         *reinterpret_cast<io_vector*>(ptr) = *this;
     }
@@ -140,20 +133,18 @@ struct io_vector <
  * structures having component types < 32b
  */
 template <
-    typename value_t,
     int MaxVectorItems,
     int MaxAlignBytes,
     int _AlignBytes,
     int _VectorItems>
 struct io_vector <
-    value_t,
     MaxVectorItems,
     MaxAlignBytes,
     _AlignBytes,
     _VectorItems,
     true>
 :
-    io_vector_base<value_t, _VectorItems, _AlignBytes>
+    io_vector_base<_VectorItems, _AlignBytes>
 {
     enum
     {
@@ -176,7 +167,7 @@ struct io_vector <
     }
 
     inline __device__
-    void load(const value_t *ptr)
+    void load(const float *ptr)
     {
         *reinterpret_cast<align_t*>(this) = *reinterpret_cast<const align_t*>(ptr);
     }
@@ -189,7 +180,7 @@ struct io_vector <
     }
 
     inline __device__
-    void store(value_t *ptr) const
+    void store(float *ptr) const
     {
         *reinterpret_cast<align_t*>(ptr) = *reinterpret_cast<const align_t*>(this);
     }

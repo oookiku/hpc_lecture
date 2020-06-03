@@ -75,9 +75,6 @@ struct block_task
 
     enum
     {
-        /// Whether this is a small, latency-bound tile
-        IsSmallTile = (ThreadItemsY < 4) && (ThreadItemsX < 4),
-
         /// Number of float in float
         DpVectorItems = divide_assert<sizeof(float), sizeof(float)>::value,
 
@@ -109,9 +106,6 @@ struct block_task
         /// Number of strip-mined LDS vector reads from shared B-tile
         ThreadLdsVectorsB = divide_assert<ThreadItemsX, LdsVectorDpVectorsB>::value,
 
-        /// Number of elements in one LDG/STG vector of C-tile
-        ThreadLdgVectorSizeC = __NV_STD_MIN(LdgAlignC, 16) / (sizeof(float)),
-
         /// Number of threads in warp
         WarpThreads = 32,
 
@@ -127,18 +121,15 @@ struct block_task
         /// Extent of warp-wide tile in items along the N-axis
         WarpItemsX = WarpThreadsX * ThreadItemsX,
 
-        /// Extent of block in warps along M-axis
-        BlockWarpsY = divide_assert<BlockItemsY, WarpItemsY>::value,
-
         /// Extent of block in warps along N-axis
         BlockWarpsX = divide_assert<BlockItemsX, WarpItemsX>::value,
     };
 
     /// Load-from-shared data movement type for A-tile, coarsened by LdsVectorDpVectorsA
-    typedef io_vector<float, LdsVectorDpVectorsA> lds_vector_a_t;
+    typedef io_vector<LdsVectorDpVectorsA> lds_vector_a_t;
 
     /// Load-from-shared data movement type for B-tile, coarsened by LdsVectorDpVectorsB
-    typedef io_vector<float, LdsVectorDpVectorsB> lds_vector_b_t;
+    typedef io_vector<LdsVectorDpVectorsB> lds_vector_b_t;
 
     /// Thread block rasterization helper type
     typedef grid_raster<
@@ -169,8 +160,8 @@ struct block_task
 
     enum
     {
-      PadItemsA = __NV_STD_MAX(LdsVectorDpVectorsA, block_loader_a_t::AlignmentDpVectorsL),
-      PadItemsB = LdsVectorDpVectorsB,
+        PadItemsA = __NV_STD_MAX(LdsVectorDpVectorsA, block_loader_a_t::AlignmentDpVectorsL),
+        PadItemsB = LdsVectorDpVectorsB,
     };
 
 
@@ -194,16 +185,6 @@ struct block_task
         /// Accumulator shared scratch
         typename thread_accumulator_t::scratch_storage_t accum_scratch;
     };
-
-
-    //-------------------------------------------------------------------------
-    // Assert assumptions
-    //-------------------------------------------------------------------------
-
-    // Ensure we have at least two unrolled innermost loop iterations (one to prefetch
-    // the next global tile and then one to prefetch the first strip of it from shared)
-    static_assert ((BlockDpVectorsK >= 2), "BlockDpVectorsK must be >= 2.");
-
 
     //-------------------------------------------------------------------------
     // Members
@@ -381,10 +362,6 @@ struct block_task
     __forceinline__ __device__
     void epilogue()
     {
-        // Wait for predecessor thread block(s) to produce block-wide tile of
-        // exclsuive partial-sums
-        k_split.wait();
-
         #pragma unroll
         for (int x = 0; x < ThreadItemsX; ++x)
         {
@@ -420,10 +397,6 @@ struct block_task
                 }
             }
         }
-
-        // Signal k-split successor thread_block that we have produced our block-wide
-        // tile of inclusive partial-sums
-        k_split.signal();
     }
 
 

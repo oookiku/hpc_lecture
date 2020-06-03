@@ -62,9 +62,6 @@ struct k_split_control
     /// Extent of a thread block's partition along the GEMM K-axis
     int split_k;
 
-    /// Whether or not to use a semaphore for inter-block k-splitting.
-    bool use_semaphore;
-
     /// Pointer to semaphore
     int *d_flags;
 
@@ -95,63 +92,6 @@ struct k_split_control
         int next_start_k = block_begin_item_k() + split_k;
         return __NV_STD_MIN(next_start_k, dim_k);
     }
-
-
-    /**
-     * Wait for predecessor thread block(s) to produce the exclusive
-     * partial-sums for this block-wide tile
-     */
-    inline __device__
-    void wait()
-    {
-        // Wait on semaphore
-        if ((use_semaphore) && (blockIdx.z > 0))
-        {
-            if (threadIdx.x == 0)
-            {
-                int bid = (blockIdx.y * gridDim.x) + blockIdx.x;
-                int hash = bid % NumFlagsSplitK;
-                int found;
-                int looking = blockIdx.z;
-                while (true)
-                {
-                    asm volatile ("ld.global.cg.u32 %0, [%1];\n" : "=r"(found) : "l"(d_flags + hash));
-
-                    if (found == looking)
-                        break;
-
-                    /// Fence to keep load from being hoisted from the loop
-                    __syncwarp(0x00000001);
-                }
-            }
-
-            __syncthreads();
-        }
-    }
-
-
-    /**
-     * Signal the successor thread_block(s) that the inclusive partial-sums
-     * from this block-wide tile are available
-     */
-    inline __device__
-    void signal()
-    {
-        if (use_semaphore)
-        {
-            __syncthreads();
-
-            if (threadIdx.x == 0)
-            {
-                int bid = (blockIdx.y * gridDim.x) + blockIdx.x;
-                int hash = bid % NumFlagsSplitK;
-                int val = blockIdx.z + 1;
-
-                asm volatile ("st.global.cg.u32 [%0], %1;\n" : : "l"(d_flags + hash), "r"(val));
-            }
-        }
-    }
-
 
     //-------------------------------------------------------------------------
     // Grid launch API
@@ -208,8 +148,6 @@ struct k_split_control
                 split_k = new_split_k;
             }
         }
-
-        use_semaphore = (grid_dims.z > 1);
     }
 
     /**
