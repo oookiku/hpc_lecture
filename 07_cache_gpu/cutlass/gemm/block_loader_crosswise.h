@@ -91,9 +91,6 @@ struct block_loader<
     {
         /// Number of dp_vector_t in a block-wide tile
         BlockDpVectors = BlockDpVectorsK * BlockDpVectorsL,
-
-        /// Number of dp_vector_t in a thread-tile
-        ThreadDpVectors = divide_assert<BlockDpVectors, BlockThreads>::value,
     };
 
     enum
@@ -157,9 +154,6 @@ struct block_loader<
     /// Extent of the input matrix in ldg_vector_t along the L-axis
     int matrix_ldgvecs_l;
 
-    /// Thread block's ending ldg_vector_t coordinate (k) within the input matrix (one-past)
-    int block_end_ldgvec_k;
-
     /// Predicate bits for guarding ldg_vector_t loads within "whole-k" block-wide tiles
     predicate_mask_t guard;
 
@@ -196,7 +190,6 @@ struct block_loader<
         int2 matrix_block_item_coords,  ///< value_t coordinates (l, k) of first block-wide tile within the input matrix
         int block_end_item_k)           ///< Thread block's ending coordinate (k) within the input matrix (one-past)
     :
-        block_end_ldgvec_k(block_end_item_k),
         guard(0),
         residue_guard(0)
     {
