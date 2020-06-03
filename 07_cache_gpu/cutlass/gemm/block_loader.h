@@ -109,7 +109,7 @@ struct block_loader
 
     /// Constructor
     block_loader(
-        float *d_matrix,              ///< Pointer to input matrix
+        float *d_matrix,                ///< Pointer to input matrix
         int matrix_values_l,            ///< Extent of the input matrix in value_t along the L-axis
         int matrix_values_stride_k,     ///< Distance in value_t within pitched-linear memory between successive coordinates along the K-axis
         int matrix_values_stride_l,     ///< Distance in value_t within pitched-linear memory between successive coordinates along the L-axis

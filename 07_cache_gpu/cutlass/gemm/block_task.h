@@ -46,9 +46,9 @@ namespace cutlass {
 namespace gemm {
 
 template <
-    int                         LdgAlignA,              ///< Alignment (in bytes) for A operand
-    int                         LdgAlignB,              ///< Alignment (in bytes) for B operand
-    int                         LdgAlignC               ///< Alignment (in bytes) for C operand
+    int LdgAlignA, ///< Alignment (in bytes) for A operand
+    int LdgAlignB, ///< Alignment (in bytes) for B operand
+    int LdgAlignC  ///< Alignment (in bytes) for C operand
 >
 struct block_task
 {
@@ -419,7 +419,7 @@ struct block_task
                     {
                         ldg_cg(c_slice, c_ptr);
 
-                        c_slice = epilogue_op(accumulator.get(x, y + i), c_slice, c_idx + i);
+                        c_slice = accumulator.get(x, y+i);
 
                         stg_cg(c_ptr, c_slice);
                     }

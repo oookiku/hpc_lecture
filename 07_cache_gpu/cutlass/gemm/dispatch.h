@@ -66,7 +66,6 @@ void dispatch(
         64,
         64>
         grid_raster_t;
-    int dynamic_smem_bytes = 0;
     int max_sm_occupancy = 8;
     int sm_count;
     get_sm_count(sm_count);
@@ -85,8 +84,7 @@ void dispatch(
                             grid);
     gemm::kernel
       <<< grid,
-      block,
-      dynamic_smem_bytes >>>(
+      block>>>(
                  m,
                  n,
                  k,
