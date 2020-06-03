@@ -2,7 +2,6 @@
 #include <stdint.h>
 #include "../util/util.h"
 #include "block_task.h"
-#include "grid_raster.h"
 #include "k_split_control.h"
 
 namespace cutlass {
@@ -58,14 +57,10 @@ void dispatch(
     float         *d_c)                           ///< Device pointer to matrix C array values        
 {
     // Thread block rasterization type
-    typedef grid_raster<
-        64,
-        64>
-        grid_raster_t;
     int max_sm_occupancy = 8;
     int sm_count;
     get_sm_count(sm_count);
-    dim3 grid  = grid_raster_t::grid_dims(m, n);
+    dim3 grid  = dim3((m+64-1)/64, (n+64-1)/64);
     dim3 block = dim3(64);
     k_split_control k_split(
                             sm_count,

@@ -35,7 +35,6 @@
 #include <stdint.h>
 
 #include "../util/util.h"
-
 #include "grid_raster.h"
 #include "block_loader.h"
 #include "k_split_control.h"
@@ -143,21 +142,14 @@ struct block_task
     block_loader_b_t;
 
 
-    enum
-    {
-        PadItemsA = __NV_STD_MAX(LdsVectorDpVectorsA, block_loader_a_t::AlignmentDpVectorsL),
-        PadItemsB = LdsVectorDpVectorsB,
-    };
-
-
     /// Shared memory layout for a prefetch page
     struct page_storage_t
     {
         /// Tile of A
-        float __align__(16) block_a[BlockDpVectorsK][BlockItemsY + PadItemsA];
+        float __align__(16) block_a[BlockDpVectorsK][BlockItemsY + LdsVectorDpVectorsA];
 
         /// Tile of B
-        float __align__(16) block_b[BlockDpVectorsK][BlockItemsX + PadItemsB];
+        float __align__(16) block_b[BlockDpVectorsK][BlockItemsX + LdsVectorDpVectorsB];
     };
 
 

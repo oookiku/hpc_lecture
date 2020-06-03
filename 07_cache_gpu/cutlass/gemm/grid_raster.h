@@ -72,28 +72,6 @@ struct grid_raster
             BlockItemsX * blockIdx.y,
             BlockItemsY * blockIdx.x);
     }
-
-    /// Whether the base \p block_item_coords are out-of-bounds for an m*n matrix C
-    inline __device__
-    bool is_block_oob(int m, int n)
-    {
-        // ColumnMajor never rasterizes fully out-of-bounds thread blocks
-        return false;
-    }
-
-    //-------------------------------------------------------------------------
-    // Grid launch API
-    //-------------------------------------------------------------------------
-
-    /// Compute the kernel grid extents (in thread blocks) for consuming an m*n matrix C
-    inline __host__ __device__
-    static dim3 grid_dims(int m, int n)
-    {
-        // blockDim.x is the fastest changing grid dim on current architectures
-        return dim3(
-            (m + BlockItemsY - 1) / BlockItemsY,
-            (n + BlockItemsX - 1) / BlockItemsX);
-    }
 };
 
 
