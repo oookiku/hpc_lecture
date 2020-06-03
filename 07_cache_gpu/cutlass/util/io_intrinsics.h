@@ -48,56 +48,20 @@ namespace cutlass {
  ******************************************************************************/
 
 /**
- * Base aligned storage for IO vector
- */
-template <int VectorItems, int AlignBytes> struct io_vector_base;
-template <int VectorItems> struct __align__(16) io_vector_base<VectorItems, 16> { float buff[VectorItems]; };
-
-
-/**
  * \brief Aligned vector type for coarsening data movement instructions
  *
  * Exposes the member constant \p VectorItems, the actual number of component
  * values comprising the io_vector
  */
-template <
-    int MaxVectorItems,                                                         ///< Maximum allowable component values
-    int MaxAlignBytes                                                           ///< Maximum allowable alignment
-            = __NV_STD_MIN(16, MaxVectorItems * sizeof(float)),
-    int AlignBytes                                                              ///< Actual alignment
-            = __NV_STD_MIN(sizeof(float) * MaxVectorItems, MaxAlignBytes),
-    int VectorItems                                                             ///< Actual number of component values
-            = divide_assert<AlignBytes, sizeof(float)>::value,
-    bool MustAlias                                                              ///< Whether we need to alias during loads/stores
-            = (VectorItems > 4)>
-struct io_vector;
-
-
-/**
- * IO vector (specialization for VectorItems <= 4)
- */
-template <
-    int MaxVectorItems,
-    int MaxAlignBytes,
-    int _AlignBytes,
-    int _VectorItems>
-struct io_vector <
-    MaxVectorItems,
-    MaxAlignBytes,
-    _AlignBytes,
-    _VectorItems,
-    false>
-:
-    io_vector_base<_VectorItems, _AlignBytes>
+struct io_vector
 {
     enum
     {
-        VectorItems = _VectorItems,
-        AlignBytes = _AlignBytes
+        VectorItems = 4,
+        AlignBytes = 16
     };
 
-    static_assert(is_pow2<AlignBytes>::value, "I/O vector alignment must be a power-of-two.");
-    static_assert((AlignBytes <= 16), "I/O vector alignment must <= 16B.");
+    float __align__(16) buff[VectorItems];
 
     inline __device__
     void load(const io_vector *ptr)
@@ -111,78 +75,10 @@ struct io_vector <
         *this = *reinterpret_cast<const io_vector*>(ptr);
     }
 
-
-    inline __device__
-    void store(io_vector *ptr) const
-    {
-        *ptr = *this;
-    }
-
     inline __device__
     void store(float *ptr) const
     {
         *reinterpret_cast<io_vector*>(ptr) = *this;
-    }
-};
-
-
-/**
- * IO vector (specialization for VectorItems > 4)
- *
- * NB: Workaround for NVCC not generating 128-bit loads/stores for aligned
- * structures having component types < 32b
- */
-template <
-    int MaxVectorItems,
-    int MaxAlignBytes,
-    int _AlignBytes,
-    int _VectorItems>
-struct io_vector <
-    MaxVectorItems,
-    MaxAlignBytes,
-    _AlignBytes,
-    _VectorItems,
-    true>
-:
-    io_vector_base<_VectorItems, _AlignBytes>
-{
-    enum
-    {
-        VectorItems = _VectorItems,
-        AlignBytes = _AlignBytes
-    };
-
-    static_assert(is_pow2<AlignBytes>::value, "I/O vector alignment must be a power-of-two.");
-    static_assert((AlignBytes <= 16), "I/O vector alignment must <= 16B.");
-
-    typedef typename nv_std::conditional<(AlignBytes == 8),
-            uint2,  // Use 8B load
-            uint4>  // Use 16B load
-        ::type align_t;
-
-    inline __device__
-    void load(const io_vector *ptr)
-    {
-        *reinterpret_cast<align_t*>(this) = *reinterpret_cast<const align_t*>(ptr);
-    }
-
-    inline __device__
-    void load(const float *ptr)
-    {
-        *reinterpret_cast<align_t*>(this) = *reinterpret_cast<const align_t*>(ptr);
-    }
-
-
-    inline __device__
-    void store(io_vector *ptr) const
-    {
-        *reinterpret_cast<align_t*>(ptr) = *reinterpret_cast<const align_t*>(this);
-    }
-
-    inline __device__
-    void store(float *ptr) const
-    {
-        *reinterpret_cast<align_t*>(ptr) = *reinterpret_cast<const align_t*>(this);
     }
 
 };

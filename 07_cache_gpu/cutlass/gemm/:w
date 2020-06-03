@@ -39,39 +39,36 @@ namespace gemm {
 
 
 /******************************************************************************
- * block_loader (CrosswiseCopy specialization)
+ * block_loader (CongruousCopy + dp1 specialization)
  ******************************************************************************/
 
 /**
  * \brief A three-phase data loading abstraction (prefetch, commit, and
  * advance) for iterating over ranges of block-wide matrix tiles.
- * (CrosswiseCopy specialization)
+ * (CongruousCopy + dp1 specialization)
  *
  * Each iteration sequence produces a KxL (height-by-width) block-wide tile of
  * value_t in shared memory.  The layout of the shared block-wide tile is
- * a row-major (L-major) tiling of dp_vector_t items, which are themselves
- * column-major (K-major) vectors of value_t.  Its dimensions are:
- *    K = BlockDpVectorsK * (sizeof(dp_vector_t) / sizeof(value_t)
+ * a row-major (L-major) tiling of singleton "dp1" dp_vector_t items, where
+ * dp_vector_t == value_t.  Its dimensions are:
+ *    K = BlockDpVectorsK
  *    L = BlockDpVectorsL
  *
  * The data is copied from a corresponding tile of global matrix data whose
- * layout of value_t is K-major.  This constitutes a CrosswiseCopy between
- * the K-major global tile and the L-major shared tile.
+ * layout of value_t is also L-major. This constitutes a CongruousCopy
+ * between the L-major global tile and the L-major shared tile.
  *
- * NB: The orientation of dp_vector_t components in shared memory is congruous
- * with the global matrix data, so we can use dp_vector_t as the minimum
- * granularity of data transfer without any intermediate {dis|re}assembly
- * of its value_t components.  However, the global and shared memory layouts
- * of dp_vector_t items are cross-wise with respect to each other, so any
- * further LDG-vectorization of dp_vector_t data requires intermediate
- * disassembly into dp_vector_t components to be stored individually into
- * the shared tile.
+ * NB: Because they are "dp1" singletons, the K-major orientation of
+ * dp_vector_t in shared memory is irrelevant, and the L-major global and
+ * shared tile layouts are perfectly congruous.  As a result, we can increase
+ * the granularity of data transfer via vectorization of loads and stores
+ * without any intermediate {dis|re}assembly.
  *
- * NB: Consecutive threads within a block are mapped in K-major
- * fashion down a first set of LDG-vectors of dp_vector_t within their global
- * tile. Successive sets of LDG-vectors are then strip-mined as necessary
- * across the L-axis.  These discontiguous LDG-vectors comprise the thread's
- * "slice" of the block-wide tile.
+ * NB: Consecutive threads within a block are mapped in L-major
+ * fashion across a first-set of LDG-vectors of dp_vector_t (value_t) within
+ * their global tile. Successive sets of LDG-vectors are then strip-mined
+ * as necessary down the K-axis.  These discontiguous LDG-vectors comprise the
+ * thread's "slice" of the block-wide tile.
  */
 template <
     int BlockThreads,           ///< Number of threads in each thread block (blockDim.x)
@@ -81,12 +78,13 @@ struct block_loader<
     BlockThreads,
     BlockDpVectorsK,
     BlockDpVectorsL,
-    load_algorithm::CrosswiseCopy>  ///< Algorithm for loading a shared tile of KxL matrix data (CrosswiseCopy specialization)
+    load_algorithm::CongruousCopy>  ///< Algorithm for loading a shared tile of KxL matrix data (CongruousCopy specialization)
 {
     //-------------------------------------------------------------------------
     // Constants and types
     //-------------------------------------------------------------------------
 
+    /// Dot-product vector type along the K-axis
     enum
     {
         /// Number of dp_vector_t in a block-wide tile
@@ -109,50 +107,49 @@ struct block_loader<
         /// Total number of ldg_vector_t within each block-wide tile
         BlockLdgVectors = divide_assert<BlockDpVectors, LdgVectorDpVectors>::value,
 
-        /// Extent of the block-wide tile in ldg_vector_t along K-axis
-        BlockLdgVectorsK = divide_assert<BlockDpVectorsK, LdgVectorDpVectors>::value,
-
         /// Extent of the block-wide tile in ldg_vector_t along L-axis
-        BlockLdgVectorsL = BlockDpVectorsL,
+        BlockLdgVectorsL = divide_assert<BlockDpVectorsL, LdgVectorDpVectors>::value,
+
+        /// Extent of the block-wide tile in ldg_vector_t along K-axis
+        BlockLdgVectorsK = BlockDpVectorsK,
 
 
 
         /// Number of ldg_vector_t within each thread-tile
         ThreadLdgVectors = divide_assert<BlockLdgVectors, BlockThreads>::value,
 
-        /// Extent of the thread tile in ldg_vector_t along K-axis
-        ThreadLdgVectorsK = __NV_STD_MAX(1, (BlockLdgVectorsK / BlockThreads)),
-
         /// Extent of the thread tile in ldg_vector_t along L-axis
-        ThreadLdgVectorsL = divide_assert<ThreadLdgVectors, ThreadLdgVectorsK>::value,
+        ThreadLdgVectorsL = __NV_STD_MAX(1, (BlockLdgVectorsL / BlockThreads)),
+
+        /// Extent of the thread tile in ldg_vector_t along K-axis
+        ThreadLdgVectorsK = divide_assert<ThreadLdgVectors, ThreadLdgVectorsL>::value,
 
 
 
         /// Number of ldg_vector_t within each stripmine-tile
         StripmineLdgVectors = BlockThreads,
 
-        /// Extent of the stripmine tile in ldg_vector_t along K-axis
-        StripmineLdgVectorsK = __NV_STD_MIN(BlockLdgVectorsK, StripmineLdgVectors),
-
         /// Extent of the stripmine tile in ldg_vector_t along L-axis
-        StripmineLdgVectorsL = divide_assert<StripmineLdgVectors, StripmineLdgVectorsK>::value,
+        StripmineLdgVectorsL = __NV_STD_MIN(BlockLdgVectorsL, StripmineLdgVectors),
+
+        /// Extent of the stripmine tile in ldg_vector_t along K-axis
+        StripmineLdgVectorsK = divide_assert<StripmineLdgVectors, StripmineLdgVectorsL>::value,
 
 
 
         /// Alignment in dp_vector_t along L needed for committing prefetch
-        AlignmentDpVectorsL = 1,
+        AlignmentDpVectorsL = LdgVectorDpVectors,
     };
 
     /// Predicate bit vector
     typedef uint64_t predicate_mask_t;
-
 
     //-------------------------------------------------------------------------
     // Members
     //-------------------------------------------------------------------------
 
     /// Input pointer to matrix in ldg_vector_t
-    io_vector *d_matrix_ldgvecs;
+    ldg_vector_t *d_matrix_ldgvecs;
 
     /// Extent of the input matrix in ldg_vector_t along the L-axis
     int matrix_ldgvecs_l;
@@ -179,7 +176,7 @@ struct block_loader<
     int2 block_thread_ldgvec_coords;
 
     /// Thread-wide tile of prefetch data
-    io_vector thread_tile[ThreadLdgVectorsK][ThreadLdgVectorsL];
+    ldg_vector_t thread_tile[ThreadLdgVectorsK][ThreadLdgVectorsL];
 
 
     //-------------------------------------------------------------------------
@@ -200,22 +197,22 @@ struct block_loader<
         guard(0),
         residue_guard(0)
     {
-        matrix_ldgvecs_l = matrix_items_l;
-        matrix_ldgvec_stride_k = matrix_items_stride_k;
-        matrix_ldgvec_stride_l = (matrix_items_stride_l / LdgVectorItems);
+        matrix_ldgvecs_l = matrix_items_l / LdgVectorItems;
+        matrix_ldgvec_stride_k = matrix_items_stride_k / LdgVectorItems,
+        matrix_ldgvec_stride_l = matrix_items_stride_l;
 
         // ldg_vector_t coordinates (l, k) of thread-tile within the block-wide tile
         block_thread_ldgvec_coords = make_int2(
-            (threadIdx.x / BlockLdgVectorsK),                // l-coordinate
-            (threadIdx.x % BlockLdgVectorsK));               // k-coordinate
+            threadIdx.x % BlockLdgVectorsL,                 // l-coordinate
+            threadIdx.x / BlockLdgVectorsL);                // k-coordinate
 
         // ldg_vector_t coordinates (l, k) of first block-wide tile within the input matrix
         int2 matrix_block_ldgvec_coords = make_int2(
-            matrix_block_item_coords.x,                     // l-coordinate
-            matrix_block_item_coords.y / LdgVectorItems);    // k-coordinate
+            matrix_block_item_coords.x / LdgVectorItems,     // l-coordinate
+            matrix_block_item_coords.y);                    // k-coordinate
 
         // Iteration span in ldg_vector_t
-        int span_ldgvec_k = (block_end_item_k - matrix_block_item_coords.y) / LdgVectorItems;
+        int span_ldgvec_k = (block_end_item_k - matrix_block_item_coords.y);
 
 
 
@@ -226,10 +223,10 @@ struct block_loader<
 
         // Iteration range in "whole-k" block-wide tiles
         wholek_tiles_remaining = span_ldgvec_k / BlockLdgVectorsK;
- 
+
         // Update the input pointer to be matrix_thread_ldgvec_coords
         this->d_matrix_ldgvecs =
-            reinterpret_cast<io_vector*>(d_matrix_items) +
+            reinterpret_cast<ldg_vector_t*>(d_matrix_items) +
             (matrix_thread_ldgvec_coords.y * matrix_ldgvec_stride_k) +
             (matrix_thread_ldgvec_coords.x * matrix_ldgvec_stride_l);
     }
@@ -294,8 +291,6 @@ struct block_loader<
     void commit(
         float (&scratch_tile)[BlockDpVectorsK][SmemDpVectorsL])
     {
-        static_assert(SmemDpVectorsL >= BlockDpVectorsL, "Row stride must be >= tile width.");
-
         // Outer thread-tile ldg_vector_t iteration (K-axis)
         #pragma unroll
         for (int thread_ldgvec_k = 0; thread_ldgvec_k < ThreadLdgVectorsK; ++thread_ldgvec_k)
@@ -308,13 +303,8 @@ struct block_loader<
             {
                 int block_ldgvec_l = block_thread_ldgvec_coords.x + (thread_ldgvec_l * StripmineLdgVectorsL);
 
-                // Write column of dp_vector_t
-                #pragma unroll
-                for (int dpvec = 0; dpvec < LdgVectorDpVectors; ++dpvec)
-                {
-                    scratch_tile[(block_ldgvec_k * LdgVectorDpVectors) + dpvec][block_ldgvec_l] =
-                        thread_tile[thread_ldgvec_k][thread_ldgvec_l].buff[dpvec];
-                }
+                thread_tile[thread_ldgvec_k][thread_ldgvec_l].store(
+                    &scratch_tile[block_ldgvec_k][block_ldgvec_l * LdgVectorDpVectors]);
             }
         }
     }

@@ -73,14 +73,11 @@ namespace gemm {
 template <
     int BlockThreads,           ///< Number of threads in each thread block (blockDim.x)
     int BlockDpVectorsK,        ///< Extent of block-wide tile in dp_vector_t along the K-axis (height)
-    int BlockDpVectorsL,        ///< Extent of block-wide tile in dp_vector_t along the L-axis (width)
-    int LeadingDimAlignBytes    ///< Byte alignment of input matrix leading dimension
->
+    int BlockDpVectorsL>        ///< Extent of block-wide tile in dp_vector_t along the L-axis (width)
 struct block_loader<
     BlockThreads,
     BlockDpVectorsK,
     BlockDpVectorsL,
-    LeadingDimAlignBytes,
     load_algorithm::CongruousCopy>  ///< Algorithm for loading a shared tile of KxL matrix data (CongruousCopy specialization)
 {
     //-------------------------------------------------------------------------
@@ -97,52 +94,45 @@ struct block_loader<
         ThreadDpVectors = divide_assert<BlockDpVectors, BlockThreads>::value,
     };
 
-    /// Data movement type, coarsened by LeadingDimAlignBytes, capped by the
-    /// smaller of either ThreadDpVectors or BlockDpVectorsL
-    typedef io_vector<
-            __NV_STD_MIN(ThreadDpVectors, BlockDpVectorsL),
-            LeadingDimAlignBytes>
-        ldg_vector_t;
-
     enum
     {
-        /// Number of dp_vector_t per ldg_vector_t
-        LdgVectorDpVectors = ldg_vector_t::VectorItems,
+        /// Number of dp_vector_t per io_vector
+        LdgVectorDpVectors = io_vector::VectorItems,
 
-        /// Number of value_t per ldg_vector_t
+        /// Number of value_t per io_vector
         LdgVectorItems = LdgVectorDpVectors,
 
 
 
-        /// Total number of ldg_vector_t within each block-wide tile
+        /// Total number of io_vector within each block-wide tile
         BlockLdgVectors = divide_assert<BlockDpVectors, LdgVectorDpVectors>::value,
 
-        /// Extent of the block-wide tile in ldg_vector_t along L-axis
+        /// Extent of the block-wide tile in io_vector along L-axis
         BlockLdgVectorsL = divide_assert<BlockDpVectorsL, LdgVectorDpVectors>::value,
 
-        /// Extent of the block-wide tile in ldg_vector_t along K-axis
+        /// Extent of the block-wide tile in io_vector along K-axis
         BlockLdgVectorsK = BlockDpVectorsK,
 
 
 
-        /// Number of ldg_vector_t within each thread-tile
+        /// Number of io_vector within each thread-tile
         ThreadLdgVectors = divide_assert<BlockLdgVectors, BlockThreads>::value,
 
-        /// Extent of the thread tile in ldg_vector_t along L-axis
+        /// Extent of the thread tile in io_vector along L-axis
         ThreadLdgVectorsL = __NV_STD_MAX(1, (BlockLdgVectorsL / BlockThreads)),
 
-        /// Extent of the thread tile in ldg_vector_t along K-axis
+        /// Extent of the thread tile in io_vector along K-axis
         ThreadLdgVectorsK = divide_assert<ThreadLdgVectors, ThreadLdgVectorsL>::value,
 
 
 
-        /// Number of ldg_vector_t within each stripmine-tile
+        /// Number of io_vector within each stripmine-tile
         StripmineLdgVectors = BlockThreads,
 
-        /// Extent of the stripmine tile in ldg_vector_t along L-axis
+        /// Extent of the stripmine tile in io_vector along L-axis
         StripmineLdgVectorsL = __NV_STD_MIN(BlockLdgVectorsL, StripmineLdgVectors),
 
-        /// Extent of the stripmine tile in ldg_vector_t along K-axis
+        /// Extent of the stripmine tile in io_vector along K-axis
         StripmineLdgVectorsK = divide_assert<StripmineLdgVectors, StripmineLdgVectorsL>::value,
 
 
@@ -154,49 +144,39 @@ struct block_loader<
     /// Predicate bit vector
     typedef uint64_t predicate_mask_t;
 
-
-    //-------------------------------------------------------------------------
-    // Assert assumptions
-    //-------------------------------------------------------------------------
-
-    static_assert(
-        (ThreadLdgVectors <= sizeof(predicate_mask_t) * 8),
-        "Predicate mask type does not contain enough bits for encoding load predicates");
-
-
     //-------------------------------------------------------------------------
     // Members
     //-------------------------------------------------------------------------
 
-    /// Input pointer to matrix in ldg_vector_t
-    ldg_vector_t *d_matrix_ldgvecs;
+    /// Input pointer to matrix in io_vector
+    io_vector *d_matrix_ldgvecs;
 
-    /// Extent of the input matrix in ldg_vector_t along the L-axis
+    /// Extent of the input matrix in io_vector along the L-axis
     int matrix_ldgvecs_l;
 
-    /// Thread block's ending ldg_vector_t coordinate (k) within the input matrix (one-past)
+    /// Thread block's ending io_vector coordinate (k) within the input matrix (one-past)
     int block_end_ldgvec_k;
 
-    /// Predicate bits for guarding ldg_vector_t loads within "whole-k" block-wide tiles
+    /// Predicate bits for guarding io_vector loads within "whole-k" block-wide tiles
     predicate_mask_t guard;
 
-    /// Predicate bits for guarding ldg_vector_t loads within the final block-wide "residue" tile
+    /// Predicate bits for guarding io_vector loads within the final block-wide "residue" tile
     predicate_mask_t residue_guard;
 
     /// Iteration span in "whole-k" block-wide tiles
     int wholek_tiles_remaining;
 
-    /// Distance in ldg_vector_t within pitched-linear memory between successive coordinates along the K-axis
+    /// Distance in io_vector within pitched-linear memory between successive coordinates along the K-axis
     int matrix_ldgvec_stride_k;
 
-    /// Distance in ldg_vector_t within pitched-linear memory between successive coordinates along the L-axis
+    /// Distance in io_vector within pitched-linear memory between successive coordinates along the L-axis
     int matrix_ldgvec_stride_l;
 
-    /// ldg_vector_t coordinates (l, k) of thread-tile within the block-wide tile
+    /// io_vector coordinates (l, k) of thread-tile within the block-wide tile
     int2 block_thread_ldgvec_coords;
 
     /// Thread-wide tile of prefetch data
-    ldg_vector_t thread_tile[ThreadLdgVectorsK][ThreadLdgVectorsL];
+    io_vector thread_tile[ThreadLdgVectorsK][ThreadLdgVectorsL];
 
 
     //-------------------------------------------------------------------------
@@ -221,22 +201,22 @@ struct block_loader<
         matrix_ldgvec_stride_k = matrix_items_stride_k / LdgVectorItems,
         matrix_ldgvec_stride_l = matrix_items_stride_l;
 
-        // ldg_vector_t coordinates (l, k) of thread-tile within the block-wide tile
+        // io_vector coordinates (l, k) of thread-tile within the block-wide tile
         block_thread_ldgvec_coords = make_int2(
             threadIdx.x % BlockLdgVectorsL,                 // l-coordinate
             threadIdx.x / BlockLdgVectorsL);                // k-coordinate
 
-        // ldg_vector_t coordinates (l, k) of first block-wide tile within the input matrix
+        // io_vector coordinates (l, k) of first block-wide tile within the input matrix
         int2 matrix_block_ldgvec_coords = make_int2(
             matrix_block_item_coords.x / LdgVectorItems,     // l-coordinate
             matrix_block_item_coords.y);                    // k-coordinate
 
-        // Iteration span in ldg_vector_t
+        // Iteration span in io_vector
         int span_ldgvec_k = (block_end_item_k - matrix_block_item_coords.y);
 
 
 
-        // ldg_vector_t coordinates (l, k) of first thread-tile tile within the input matrix
+        // io_vector coordinates (l, k) of first thread-tile tile within the input matrix
         int2 matrix_thread_ldgvec_coords = make_int2(
             block_thread_ldgvec_coords.x + matrix_block_ldgvec_coords.x,
             block_thread_ldgvec_coords.y + matrix_block_ldgvec_coords.y);
@@ -246,7 +226,7 @@ struct block_loader<
 
         // Update the input pointer to be matrix_thread_ldgvec_coords
         this->d_matrix_ldgvecs =
-            reinterpret_cast<ldg_vector_t*>(d_matrix_items) +
+            reinterpret_cast<io_vector*>(d_matrix_items) +
             (matrix_thread_ldgvec_coords.y * matrix_ldgvec_stride_k) +
             (matrix_thread_ldgvec_coords.x * matrix_ldgvec_stride_l);
     }
@@ -262,15 +242,15 @@ struct block_loader<
     inline __device__
     void request()
     {
-        // Outer thread-tile ldg_vector_t iteration (K-axis)
+        // Outer thread-tile io_vector iteration (K-axis)
         #pragma unroll
         for (int thread_ldgvec_k = 0; thread_ldgvec_k < ThreadLdgVectorsK; ++thread_ldgvec_k)
         {
-            // Inner thread-tile ldg_vector_t iteration (L-axis)
+            // Inner thread-tile io_vector iteration (L-axis)
             #pragma unroll
             for (int thread_ldgvec_l = 0; thread_ldgvec_l < ThreadLdgVectorsL; ++thread_ldgvec_l)
             {
-                // Linear index of ldg_vector_t load
+                // Linear index of io_vector load
                 int ldgvec_idx = (thread_ldgvec_k * ThreadLdgVectorsL) + thread_ldgvec_l;
 
                 // Unpack predicate guard
@@ -311,15 +291,13 @@ struct block_loader<
     void commit(
         float (&scratch_tile)[BlockDpVectorsK][SmemDpVectorsL])
     {
-        static_assert(SmemDpVectorsL >= BlockDpVectorsL, "Row stride must be >= tile width.");
-
-        // Outer thread-tile ldg_vector_t iteration (K-axis)
+        // Outer thread-tile io_vector iteration (K-axis)
         #pragma unroll
         for (int thread_ldgvec_k = 0; thread_ldgvec_k < ThreadLdgVectorsK; ++thread_ldgvec_k)
         {
             int block_ldgvec_k = block_thread_ldgvec_coords.y + (thread_ldgvec_k * StripmineLdgVectorsK);
 
-            // Inner thread-tile ldg_vector_t iteration (L-axis)
+            // Inner thread-tile io_vector iteration (L-axis)
             #pragma unroll
             for (int thread_ldgvec_l = 0; thread_ldgvec_l < ThreadLdgVectorsL; ++thread_ldgvec_l)
             {

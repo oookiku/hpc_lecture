@@ -75,9 +75,6 @@ struct block_task
 
     enum
     {
-        /// Number of float in float
-        DpVectorItems = divide_assert<sizeof(float), sizeof(float)>::value,
-
         /// Extent of block-wide C-tile in float (and A-tiles in float) along M-axis (height)
         BlockItemsY = 64,
 
@@ -88,17 +85,13 @@ struct block_task
         BlockItemsK = 8,
 
         /// Extent of block-wide A|B tiles in float along the K-axis
-        BlockDpVectorsK = divide_assert<BlockItemsK, DpVectorItems>::value,
+        BlockDpVectorsK = 8,
 
         /// Number of float along M-axis that can be read in a single LDS from the shared A-tile (up to 128b if more than one float)
-        LdsVectorDpVectorsA = __NV_STD_MIN(
-            ThreadItemsY,
-            __NV_STD_MAX(1, (128 / (sizeof(float) * 8)))),
+        LdsVectorDpVectorsA = 4,
 
         /// Number of float along N-axis that can be read in a single LDS from the shared B-tile (up to 128b if more than one float)
-        LdsVectorDpVectorsB = __NV_STD_MIN(
-            ThreadItemsX,
-            __NV_STD_MAX(1, (128 / (sizeof(float) * 8)))),
+        LdsVectorDpVectorsB = 4,
 
         /// Number of strip-mined LDS vector reads from shared A-tile
         ThreadLdsVectorsA = divide_assert<ThreadItemsY, LdsVectorDpVectorsA>::value,
@@ -125,12 +118,6 @@ struct block_task
         BlockWarpsX = divide_assert<BlockItemsX, WarpItemsX>::value,
     };
 
-    /// Load-from-shared data movement type for A-tile, coarsened by LdsVectorDpVectorsA
-    typedef io_vector<LdsVectorDpVectorsA> lds_vector_a_t;
-
-    /// Load-from-shared data movement type for B-tile, coarsened by LdsVectorDpVectorsB
-    typedef io_vector<LdsVectorDpVectorsB> lds_vector_b_t;
-
     /// Thread block rasterization helper type
     typedef grid_raster<
       64,
@@ -143,7 +130,6 @@ struct block_task
       64,                                   // BlockThreads
       8,                                    // BlockDpVectorsK
       64,                                   // BlockItemsL
-      16,                                   // MatrixAlignBytes
       load_algorithm::CongruousCopy>
     block_loader_a_t;
 
@@ -153,7 +139,6 @@ struct block_task
       64,                                   // BlockThreads
       8,                                    // BlockDpVectorsK
       64,                                   // BlockItes
-      16,                                   // MatrixAlignBytes
       load_algorithm::CrosswiseCopy>
     block_loader_b_t;
 
@@ -227,10 +212,10 @@ struct block_task
     int thread_strip_offset_b;
 
     /// Thread's active-k/prefetch-k slices from shared A tile
-    lds_vector_a_t local_slices_a[2][ThreadLdsVectorsA];
+    io_vector local_slices_a[2][ThreadLdsVectorsA];
 
     /// Thread's active-k/prefetch-k slices from shared B tile
-    lds_vector_b_t local_slices_b[2][ThreadLdsVectorsB];
+    io_vector local_slices_b[2][ThreadLdsVectorsB];
 
     /// A tile loader
     block_loader_a_t loader_a;
@@ -330,8 +315,8 @@ struct block_task
      * Request the calling thread's slices of the shared tiles at depth \p tile_offset_k
      */
     inline __device__ void request_local_prefetch(
-        lds_vector_a_t (&slice_a)[ThreadLdsVectorsA],  ///< Slice from A
-        lds_vector_b_t (&slice_b)[ThreadLdsVectorsB],  ///< Slice from B
+        io_vector (&slice_a)[ThreadLdsVectorsA],  ///< Slice from A
+        io_vector (&slice_b)[ThreadLdsVectorsB],  ///< Slice from B
         int tile_offset_k)
     {
         // Load B strip
