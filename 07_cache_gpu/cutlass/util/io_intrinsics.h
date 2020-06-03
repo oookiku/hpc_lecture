@@ -199,187 +199,71 @@ struct io_vector <
 
 
 
-
-
-
-/******************************************************************************
- * Macro expansions for vector loads
- ******************************************************************************/
-
-/**
- * Define vector-1 LD specialization for the given load modifier
- */
-#define CUTLASS_LD_V1(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint) \
-    template <typename ptr_t>                                                                   \
-    inline __device__                                                                           \
-    void f_name(                                                                                \
-        value_t (&dest)[1],                                                                     \
-        ptr_t ptr)                                                                              \
-    {                                                                                           \
-        asm volatile ("ld."#load_modifier"."#ptx_type" %0, [%1];\n"                             \
-            :                                                                                   \
-                "="#val_constraint(dest[0])                                                     \
-            :                                                                                   \
-                #ptr_constraint(ptr));                                                          \
-    }
-
-
-/**
- * Define powers-of-two vector LD specializations
- */
-#define CUTLASS_LD_ALL(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    CUTLASS_LD_V1(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)
-
-
-/******************************************************************************
- * Macro expansions for vector stores
- ******************************************************************************/
-
-/**
- * Define vector-1 ST specialization for the given load modifier
- */
-#define CUTLASS_ST_V1(f_name, value_t, store_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    template <typename ptr_t>                                                                       \
-    inline __device__                                                                               \
-    void f_name(                                                                                    \
-        ptr_t ptr,                                                                                  \
-        const value_t (&src)[1])                                                                    \
-    {                                                                                               \
-        asm volatile ("st."#store_modifier"."#ptx_type" [%0], %1;\n"                                \
-            : :                                                                                     \
-                #ptr_constraint(ptr),                                                               \
-                #val_constraint(src[0]));                                                           \
-    }
-
-
-/**
- * Define powers-of-two vector LD specializations
- */
-#define CUTLASS_ST_ALL(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)    \
-    CUTLASS_ST_V1(f_name, value_t, load_modifier, ptx_type, val_constraint, ptr_constraint)
-
-
-
-/******************************************************************************
- * Macro expansions for vector IO
- ******************************************************************************/
-
-/**
- * Define global and shared LD specializations
- */
-#define CUTLASS_IO(value_t, ptx_type, val_constraint)                                       \
-    CUTLASS_LD_ALL(ldg_cg_internal, value_t, global.cg, ptx_type, val_constraint, l)        \
-    CUTLASS_ST_ALL(stg_cg_internal, value_t, global.cg, ptx_type, val_constraint, l)
-
-
-// Define IO for useful types
-CUTLASS_IO(double,     f64, d)
-CUTLASS_IO(float,      f32, f)
-CUTLASS_IO(int64_t,    b64, l)
-CUTLASS_IO(int32_t,    b32, r)
-CUTLASS_IO(int16_t,    b16, h)
-
-
-// Macro cleanup
-#undef CUTLASS_IO
-#undef CUTLASS_LD_ALL
-#undef CUTLASS_LD_V4
-#undef CUTLASS_LD_V2
-#undef CUTLASS_LD_V1
-#undef CUTLASS_ST_ALL
-#undef CUTLASS_ST_V4
-#undef CUTLASS_ST_V2
-#undef CUTLASS_ST_V1
-
-
 /******************************************************************************
  * I/O cast types
  ******************************************************************************/
 
 /// Provides the type for which to reinterpret-cast a given vector
-template <
-    typename value_t,
-    int IoVecDim,
-    int ValueBytes = sizeof(value_t)>
 struct io_cast
 {
-    typedef value_t type[IoVecDim];
+    typedef float type[1];
 };
-
-
-/// Provides the type for which to reinterpret-cast a vector of 1B types
-template <
-    typename value_t,
-    int IoVecDim>
-struct io_cast<value_t, IoVecDim, 1>
-{
-    typedef typename nv_std::conditional<
-            (IoVecDim < 2),
-            int8_t[1],                                 // Use 8b load
-            typename nv_std::conditional<
-                (IoVecDim < 4),
-                int16_t[1],                            // Use 16b load
-                int32_t[IoVecDim / 4]>::type>::type    // Use up to 128b load
-        type;
-};
-
-
-/// Provides the type for which to reinterpret-cast a vector of 2B types
-template <
-    typename value_t,
-    int IoVecDim>
-struct io_cast<value_t, IoVecDim, 2>
-{
-    typedef typename nv_std::conditional<
-            (IoVecDim < 2),
-            int16_t[1],                                // Use 16b load
-            int32_t[IoVecDim / 2]>::type               // Use up to 128b load
-        type;
-};
-
-
 
 /******************************************************************************
  * ldg_cg intrinsics
  ******************************************************************************/
 
+inline __device__
+void ldg_cg_internal(
+    float (&dest)[1], 
+    float *ptr)
+{
+    asm volatile ("ld.global.cg.f32 %0, [%1];\n"
+        :
+            "=f"(dest[0])
+        :
+            "l"(ptr));
+}
+
 /// Load from global (cache-global modifier)
-template <typename value_t, typename ptr_t>
 inline __device__
 void ldg_cg(
-    value_t &dest,
-    ptr_t d_in)
+    float &dest,
+    float *d_in)
 {
     // Cast dest to a different array type if necessary
     ldg_cg_internal(
-        reinterpret_cast<typename io_cast<value_t, 1>::type &>(dest),
+        reinterpret_cast<typename io_cast::type &>(dest),
         d_in);
 }
-
-
 
 
 /******************************************************************************
  * stg_cg intrinsics
  ******************************************************************************/
 
+inline __device__
+void stg_cg_internal(
+    float *ptr,
+    const float (&src)[1])
+{
+    asm volatile ("st.global.cg.f32 [%0], %1;\n"
+        : :
+            "l"(ptr),
+            "f"(src[0]));
+}
+
 /// Store to global (cache-global modifier)
-template <typename ptr_t, typename value_t>
 inline __device__
 void stg_cg(
-    ptr_t dest,
-    const value_t &src)
+    float *dest,
+    const float &src)
 {
     // Cast src to a different array type if necessary
     stg_cg_internal(
         dest,
-        reinterpret_cast<const typename io_cast<value_t, 1>::type &>(src));
+        reinterpret_cast<const typename io_cast::type &>(src));
 }
 
 
-
-
-
-
 } // namespace cutlass
-
