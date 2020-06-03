@@ -50,8 +50,6 @@ void dispatch(
     int             m,                              ///< Height in rows of op(A) and C
     int             n,                              ///< Width in columns of op(B) and C
     int             k,                              ///< Width in columns of op(A) and height in rows of op(B)
-    float           alpha,
-    float           beta,
     float         *d_a,                           ///< Device pointer to matrix A array values
     float         *d_b,                           ///< Device pointer to matrix B array values
     float         *d_c)                           ///< Device pointer to matrix C array values        

@@ -63,8 +63,6 @@ int main(int argc, const char **argv) {
         m,
         n,
         k,
-        alpha,
-        beta,
         A.d_data(),
         B.d_data(),
         C2.d_data());
