@@ -3,6 +3,7 @@
 #include <cmath>
 #include <immintrin.h>
 
+#ifdef MY_ANS
 namespace my {
 inline float reduce_sum_f32v(__m256 v)
 {
@@ -32,6 +33,7 @@ inline __m256 rsqrt_nr_f32v(__m256 x)
   return _mm256_mul_ps(_mm256_mul_ps(half, yn), _mm256_sub_ps(three, muls));
 }
 } // namespace my
+#endif
 
 int main() {
   const int N = 8;
@@ -42,6 +44,7 @@ int main() {
     m[i] = drand48();
     fx[i] = fy[i] = 0;
   }
+#ifdef MY_ANS
   __m256 x_vec  = _mm256_load_ps(x);
   __m256 y_vec  = _mm256_load_ps(y);
   __m256 m_vec  = _mm256_load_ps(m);
@@ -77,5 +80,35 @@ int main() {
     fx[i] = my::reduce_sum_f32v(fx_tmp);
     fy[i] = my::reduce_sum_f32v(fy_tmp);
     printf("%d %g %g\n",i,fx[i],fy[i]);
+#else
+  __m256 zero = _mm256_setzero_ps();
+  for(int i=0; i<N; i+=8) {
+    __m256 xi = _mm256_load_ps(x+i);
+    __m256 yi = _mm256_load_ps(y+i);
+    __m256 fxi = zero;
+    __m256 fyi = zero;
+    for(int j=0; j<N; j++) {
+      __m256 dx = _mm256_set1_ps(x[j]);
+      __m256 dy = _mm256_set1_ps(y[j]);
+      __m256 mj = _mm256_set1_ps(m[j]);
+      __m256 r2 = zero;
+      dx = _mm256_sub_ps(xi, dx);
+      dy = _mm256_sub_ps(yi, dy);
+      r2 = _mm256_fmadd_ps(dx, dx, r2);
+      r2 = _mm256_fmadd_ps(dy, dy, r2);
+      __m256 mask = _mm256_cmp_ps(r2, zero, _CMP_GT_OQ);
+      __m256 invR = _mm256_rsqrt_ps(r2);
+      invR = _mm256_blendv_ps(zero, invR, mask);
+      mj = _mm256_mul_ps(mj, invR);
+      invR = _mm256_mul_ps(invR, invR);
+      mj = _mm256_mul_ps(mj, invR);
+      fxi = _mm256_fmadd_ps(dx, mj, fxi);
+      fyi = _mm256_fmadd_ps(dy, mj, fyi);
+    }
+    _mm256_store_ps(fx+i, fxi);
+    _mm256_store_ps(fy+i, fyi);
+#endif
   }
+  for(int i=0; i<N; i++)
+    printf("%d %g %g\n",i,fx[i],fy[i]);
 }
