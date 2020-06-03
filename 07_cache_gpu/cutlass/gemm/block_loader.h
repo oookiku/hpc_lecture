@@ -53,25 +53,6 @@ struct load_algorithm
         CongruousCopy  = 0,
         CrosswiseCopy  = 1,
     };
-
-    /**
-     * \brief Generic tag
-     */
-    template <kind_t Kind>
-    struct any_tag : nv_std::integral_constant<kind_t, Kind> {};
-
-    /**
-     * \brief Copy from a global matrix that is row-major in relation
-     * to the local row-major tile
-     */
-    typedef any_tag<CongruousCopy> contiguous_tag_t;
-
-    /**
-     * \brief Copy from a global matrix that is column-major in relation
-     * to the local row-major tile
-     */
-    typedef any_tag<CrosswiseCopy> crosswise_tag_t;
-
 };
 
 

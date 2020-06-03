@@ -50,25 +50,6 @@ enum
 };
 
 
-/**
- * Global K-split semaphore flags
- *
- * TODO: use demand-allocated storage to provide copies for concurrent streams
- */
-__device__ int d_flags_split_k[NumFlagsSplitK];
-
-
-/**
- * Preparation kernel for zero-initializing semaphore flags
- */
-__global__ void prepare_kernel(int *d_flags_split_k)
-{
-    int tid = (blockIdx.x * blockDim.x) + threadIdx.x;
-    if (tid < NumFlagsSplitK)
-        d_flags_split_k[tid] = 0;
-}
-
-
 /******************************************************************************
  * k_split_control
  ******************************************************************************/
@@ -181,7 +162,6 @@ struct k_split_control
      */
     inline
     k_split_control(
-        int     *d_flags,
         int     sm_count,
         int     max_sm_occupancy,
         int     dim_k,
@@ -189,7 +169,6 @@ struct k_split_control
         dim3    block_dims,
         dim3    &grid_dims)         ///< [in,out]
     :
-        d_flags(d_flags),
         split_k(dim_k)
     {
         // Compute wave efficiency
@@ -232,37 +211,6 @@ struct k_split_control
 
         use_semaphore = (grid_dims.z > 1);
     }
-
-
-    /**
-     * Initializer
-     */
-    cudaError_t prepare(
-        cudaStream_t    stream,             ///< CUDA stream to launch kernels within.  Default is stream<sub>0</sub>.
-        bool            debug_synchronous)  ///< Whether or not to synchronize the stream after every kernel launch to check for errors.  Also causes launch configurations to be printed to the console if DEBUG is defined.  Default is \p false.
-
-    {
-        cudaError error = cudaSuccess;
-
-        if (use_semaphore)
-        {
-            int block_threads = 128;
-            int grid_dims = (NumFlagsSplitK + block_threads - 1) / block_threads;
-
-            prepare_kernel<<<grid_dims, block_threads, 0, stream>>>(d_flags);
-
-            // Check for failure to launch
-            if (CUDA_PERROR_DEBUG(error = cudaPeekAtLastError()))
-                return error;
-
-            // Sync the stream if specified to flush runtime errors
-            if (debug_synchronous && (CUDA_PERROR_DEBUG(error = cudaStreamSynchronize(stream))))
-                return error;
-        }
-
-        return error;
-    }
-
 
     /**
      * Compute the efficiency of dispatch wave quantization

@@ -40,7 +40,6 @@
 #include "block_loader.h"
 #include "k_split_control.h"
 #include "thread_accumulator.h"
-#include "epilogue_function.h"
 
 namespace cutlass {
 namespace gemm {
@@ -216,9 +215,6 @@ struct block_task
     /// Pointer to matrix C
     float *d_c;
 
-    /// Epilogue operation applied to update matrix C
-    gemm::blas_scaled_epilogue epilogue_op;
-
     /// Matrix height in rows of trans_op(A) and C
     int dim_m;
 
@@ -304,7 +300,6 @@ struct block_task
         float *d_a,
         float *d_b,
         float *d_c,
-        gemm::blas_scaled_epilogue epilogue_op,
         int dim_m,
         int dim_n,
         int dim_k,
@@ -312,7 +307,6 @@ struct block_task
     :
         scratch(scratch),
         d_c(d_c),
-        epilogue_op(epilogue_op),
         dim_m(dim_m),
         dim_n(dim_n),
         k_split(k_split),
