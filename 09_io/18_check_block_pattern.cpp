@@ -1,6 +1,5 @@
 #include <cassert>
 #include <cstdio>
-#include <chrono>
 #include <vector>
 #include "hdf5.h"
 using namespace std;

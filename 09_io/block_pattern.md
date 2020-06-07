@@ -5,4 +5,4 @@
 I checked if the block pattern is correct, visually.  
 18_check_block_pattern.cpp outputs vti file,  
 then we can visualize the pattern by inputting the file to Paraview.  
-Where the array size is NX=256, NY=256.  
+Where the array size is NX=100, NY=100.  
