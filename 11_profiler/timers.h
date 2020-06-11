@@ -1,4 +1,4 @@
-#define GETTIME 1
+//#define GETTIME 1
 
 #if TIME
 #include <time.h>
