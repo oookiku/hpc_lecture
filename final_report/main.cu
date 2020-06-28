@@ -117,6 +117,7 @@ int main()
       file << x[i] << " " << y[j] << " " << h_u[idx] << " " << h_v[idx] << " " << h_p[idx] << endl;
     }
   }
+  file.close();
 
   cudaFree(d_un);
   cudaFree(d_u);
