@@ -117,4 +117,12 @@ int main()
       file << x[i] << " " << y[j] << " " << h_u[idx] << " " << h_v[idx] << " " << h_p[idx] << endl;
     }
   }
+
+  cudaFree(d_un);
+  cudaFree(d_u);
+  cudaFree(d_vn);
+  cudaFree(d_v);
+  cudaFree(d_pn);
+  cudaFree(d_p);
+  cudaFree(d_b);
 }
